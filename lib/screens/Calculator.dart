@@ -1,158 +1,234 @@
 import 'package:flutter/material.dart';
-import 'package:expressions/expressions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:expressions/expressions.dart';
 
-class CalculatorView extends StatefulWidget {
-  const CalculatorView({Key? key}) : super(key: key);
+class CalculatorScreen extends StatefulWidget {
+  const CalculatorScreen({super.key});
 
   @override
-  _CalculatorViewState createState() => _CalculatorViewState();
+  _CalculatorScreenState createState() => _CalculatorScreenState();
 }
 
-class _CalculatorViewState extends State<CalculatorView> {
-  String _expression = '';
-  String _result = '';
+class _CalculatorScreenState extends State<CalculatorScreen> {
+  final TextEditingController _controller = TextEditingController();
+  String _result = "";
+  SharedPreferences? _prefs;
 
-  void _onButtonPressed(String buttonText) {
+  @override
+  void initState() {
+    super.initState();
+    _loadLastResult();
+  }
+
+  Future<void> _loadLastResult() async {
+    _prefs = await SharedPreferences.getInstance();
     setState(() {
-      if (buttonText == '=') {
-        _calculateResult();
-      } else if (buttonText == 'C') {
-        _clearResult();
-      } else {
-        _expression += buttonText;
-      }
+      _result = _prefs?.getString('last_result') ?? "";
+      _controller.text = _result;
     });
   }
 
-  void _calculateResult() {
+  void _calculate() {
+    String input = _controller.text;
     try {
-      double eval = evalExpression(_expression);
-      _result = eval.toString();
-      saveCalculation(_expression, eval);
-    } catch (e) {
-      print('Error calculating result: $e');
+      final result = _evaluateExpression(input);
       setState(() {
-        _result = 'Error';
+        _result = result.toString();
+        _controller.text = _result;
+      });
+      _saveLastResult(_result);
+    } catch (e) {
+      setState(() {
+        _result = "Error";
       });
     }
   }
 
-  double evalExpression(String expression) {
-    try {
-      Expression exp = Expression.parse(expression);
-      final evaluator = ExpressionEvaluator();
-      final result = evaluator.eval(exp, {});
-      if (result is double) {
-        return result;
-      } else {
-        throw Exception('Invalid expression result');
-      }
-    } catch (e) {
-      print('Error evaluating expression: $e');
-      throw Exception('Invalid expression');
+  double _evaluateExpression(String expression) {
+    expression = expression.replaceAll(' ', '');
+    final exp = Expression.parse(expression);
+    final evaluator = const ExpressionEvaluator();
+    final result = evaluator.eval(exp, {});
+    
+    return result.toDouble();
+  }
+
+  Future<void> _saveLastResult(String result) async {
+    if (_prefs != null) {
+      await _prefs?.setString('last_result', result);
     }
   }
 
-  void _clearResult() {
+  void _appendOperator(String operator) {
     setState(() {
-      _expression = '';
-      _result = '';
+      _controller.text += operator;
     });
   }
 
-  Future<void> saveCalculation(String expression, double result) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      List<String>? calculations = prefs.getStringList('calculations') ?? [];
-      calculations.add('$expression = $result');
-      await prefs.setStringList('calculations', calculations);
-    } catch (e) {
-      print('Error saving calculation: $e');
-    }
+  void _appendNumber(String number) {
+    setState(() {
+      _controller.text += number;
+    });
   }
 
-  Future<List<String>> getCalculations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      List<String>? calculations = prefs.getStringList('calculations');
-      return calculations ?? [];
-    } catch (e) {
-      print('Error retrieving calculations: $e');
-      return [];
-    }
-  }
-
-  Future<void> clearCalculations() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('calculations');
-    } catch (e) {
-      print('Error clearing calculations: $e');
-    }
+  void _clearInput() {
+    setState(() {
+      _controller.text = "";
+      _result = "";
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.deepPurpleAccent,
+        backgroundColor: Colors.black,
         title: Text(
           'Calculator',
           style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.bold, color: Colors.grey),
+            fontSize: 23,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
-        centerTitle: true,
       ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            _expression,
-            style: TextStyle(fontSize: 20, color: Colors.white),
-          ),
-          SizedBox(height: 10),
-          Text(
-            _result,
-            style: TextStyle(
-                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          SizedBox(height: 20),
-          _buildKeypad(),
-        ],
+      backgroundColor: Colors.white,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                labelText: 'Enter expression',
+                labelStyle: TextStyle(
+                  color: Colors.black,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.black, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.black, width: 1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              onSubmitted: (value) => _calculate(),
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.black,
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: Colors.black,
+                minimumSize: Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: _calculate,
+              child: Text(
+                'Calculate',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Result: $_result',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            SizedBox(height: 20),
+            _buildKeypad(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildKeypad() {
-    List<List<String>> keypad = [
-      ['7', '8', '9', '/'],
-      ['4', '5', '6', '*'],
-      ['1', '2', '3', '+'],
-      ['=', '0', 'C', '-']
-    ];
-
     return Column(
-      children: keypad.map((row) {
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: row.map((buttonText) {
-            return _buildButton(buttonText);
-          }).toList(),
-        );
-      }).toList(),
+      children: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            _buildKeypadButton('1'),
+            _buildKeypadButton('2'),
+            _buildKeypadButton('3'),
+            _buildKeypadButton('+'),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            _buildKeypadButton('4'),
+            _buildKeypadButton('5'),
+            _buildKeypadButton('6'),
+            _buildKeypadButton('-'),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            _buildKeypadButton('7'),
+            _buildKeypadButton('8'),
+            _buildKeypadButton('9'),
+            _buildKeypadButton('*'),
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            _buildKeypadButton('C'),
+            _buildKeypadButton('0'),
+            _buildKeypadButton('.'),
+            _buildKeypadButton('/'),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildButton(String buttonText) {
-    return Container(
-      padding: EdgeInsets.all(10),
-      child: ElevatedButton(
-        onPressed: () => _onButtonPressed(buttonText),
-        child: Text(
-          buttonText,
-          style: TextStyle(fontSize: 24),
+  Widget _buildKeypadButton(String text) {
+    return ElevatedButton(
+      onPressed: () {
+        if (text == 'C') {
+          _clearInput();
+        } else if (text == '.' ||
+            text == '+' ||
+            text == '-' ||
+            text == '*' ||
+            text == '/') {
+          _appendOperator(text);
+        } else {
+          _appendNumber(text);
+        }
+      },
+      child: Text(text),
+      style: ElevatedButton.styleFrom(
+        minimumSize: Size(60, 60),
+        backgroundColor: Colors.grey[900],
+        textStyle: TextStyle(
+          fontSize: 18,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
